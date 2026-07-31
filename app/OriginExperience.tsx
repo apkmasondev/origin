@@ -4,14 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const SOURCES = {
   large: [
-    "/assets/video/scene-01-point-explosion-1080p-gop1.mp4",
-    "/assets/video/scene-02-hummingbird-1080p-gop1.mp4",
-    "/assets/video/scene-03-hummingbird-cosmos-1080p-gop1.mp4",
+    "assets/video/scene-01-point-explosion-1080p-gop1.mp4",
+    "assets/video/scene-02-hummingbird-1080p-gop1.mp4",
+    "assets/video/scene-03-hummingbird-cosmos-1080p-gop1.mp4",
   ],
   small: [
-    "/assets/video/scene-01-point-explosion-720p-gop1.mp4",
-    "/assets/video/scene-02-hummingbird-720p-gop1.mp4",
-    "/assets/video/scene-03-hummingbird-cosmos-720p-gop1.mp4",
+    "assets/video/scene-01-point-explosion-720p-gop1.mp4",
+    "assets/video/scene-02-hummingbird-720p-gop1.mp4",
+    "assets/video/scene-03-hummingbird-cosmos-720p-gop1.mp4",
   ],
 } as const;
 

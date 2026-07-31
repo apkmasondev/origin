@@ -90,11 +90,11 @@ a {
 }
 
 .reduced-start {
-  background-image: url("/assets/posters/poster-start.webp");
+  background-image: url("assets/posters/poster-start.webp");
 }
 
 .reduced-final {
-  background-image: url("/assets/posters/poster-final-cosmos.webp");
+  background-image: url("assets/posters/poster-final-cosmos.webp");
   opacity: var(--reduced-fade);
 }
 
@@ -131,7 +131,7 @@ video {
 .loader-poster {
   position: absolute;
   inset: 0;
-  background: #000 url("/assets/posters/poster-start.webp") center / cover no-repeat;
+  background: #000 url("assets/posters/poster-start.webp") center / cover no-repeat;
   opacity: 0.48;
 }
 
