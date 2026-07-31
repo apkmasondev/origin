@@ -4,17 +4,10 @@ import "./globals.css";
 const title = "ORIGIN — The Cycle of Becoming";
 const description =
   "A scroll-driven cinematic cycle: a point becomes energy, life and cosmos, then returns.";
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
   title,
   description,
-  icons: {
-    icon: [{ url: "favicon.svg", type: "image/svg+xml" }],
-    shortcut: "favicon.svg",
-    apple: "favicon.svg",
-  },
   openGraph: {
     title,
     description,
@@ -43,6 +36,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+        <link rel="shortcut icon" href="favicon.svg" />
+        <link rel="apple-touch-icon" href="favicon.svg" />
+      </head>
       <body>{children}</body>
     </html>
   );
