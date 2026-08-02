@@ -57,7 +57,7 @@ a {
 }
 
 .film-layer,
-.film-canvas,
+.origin-video,
 .reduced-frame,
 .edge-vignette,
 .loader,
@@ -67,23 +67,44 @@ a {
 }
 
 .film-layer {
+  z-index: 0;
   background: #000;
+  opacity: 0;
+  isolation: isolate;
+  transition: opacity 900ms cubic-bezier(0.2, 0.75, 0.2, 1);
 }
 
-.film-canvas {
+.is-ready .film-layer {
+  opacity: 1;
+}
+
+.origin-video {
   width: 100%;
   height: 100%;
   display: block;
   opacity: 0;
-  transition: opacity 900ms cubic-bezier(0.2, 0.75, 0.2, 1);
+  object-fit: cover;
+  object-position: 50% 50%;
+  pointer-events: none;
+  will-change: opacity;
+  backface-visibility: hidden;
 }
 
-.is-ready .film-canvas {
-  opacity: 1;
+.origin-video-one {
+  z-index: 0;
+}
+
+.origin-video-two {
+  z-index: 1;
+}
+
+.origin-video-three {
+  z-index: 2;
 }
 
 .reduced-frame {
   display: none;
+  z-index: 3;
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -96,14 +117,6 @@ a {
 .reduced-final {
   background-image: url("assets/posters/poster-final-cosmos.webp");
   opacity: var(--reduced-fade);
-}
-
-video {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .edge-vignette {
@@ -579,7 +592,7 @@ video {
     height: 300svh;
   }
 
-  .film-canvas {
+  .origin-video {
     display: none;
   }
 
@@ -591,7 +604,7 @@ video {
     animation: none;
   }
 
-  .film-canvas,
+  .film-layer,
   .interface,
   .loader {
     transition-duration: 120ms;

@@ -7,9 +7,13 @@ const root = new URL("../", import.meta.url);
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+  const { default: handler } = await import(workerUrl.href);
 
-  return worker.fetch(
+  const fetch = typeof handler === "function"
+    ? handler
+    : handler.fetch.bind(handler);
+
+  return fetch(
     new Request("http://localhost/", {
       headers: { accept: "text/html", host: "localhost" },
     }),
@@ -56,8 +60,14 @@ test("keeps the cinematic implementation and supplied media intact", async () =>
   assert.match(component, /scene-03-hummingbird-cosmos-1080p-gop1\.mp4/);
   assert.match(component, /scene-03-hummingbird-cosmos-720p-gop1\.mp4/);
   assert.match(component, /smoothstep/);
-  assert.match(component, /globalAlpha/);
-  assert.match(component, /1 \/ 48/);
+  assert.match(component, /SCROLL_SMOOTHING_MS = 110/);
+  assert.match(component, /FRAME_DURATION = 1 \/ 24/);
+  assert.match(component, /MAXIMUM_FRAME_STEP/);
+  assert.match(component, /video\.seeking/);
+  assert.doesNotMatch(component, /<canvas|drawImage|globalAlpha/);
+  assert.match(css, /\.origin-video/);
+  assert.match(css, /object-fit:\s*cover/);
+  assert.match(css, /will-change:\s*opacity/);
   assert.match(css, /height:\s*900svh/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

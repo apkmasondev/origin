@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const SOURCES = {
   large: [
@@ -15,9 +15,24 @@ const SOURCES = {
   ],
 } as const;
 
+const FRAME_DURATION = 1 / 24;
+const SEEK_THRESHOLD = FRAME_DURATION * 0.62;
+const MAXIMUM_FRAME_STEP = FRAME_DURATION * 2.25;
+const SCROLL_SMOOTHING_MS = 110;
+const PROGRESS_EPSILON = 0.00004;
+
 const PHASES: Phase[] = ["POINT", "MATTER", "TRANSIT", "LIFE", "RELEASE", "COSMOS"];
 
 type Phase = "POINT" | "MATTER" | "TRANSIT" | "LIFE" | "RELEASE" | "COSMOS";
+type NumberTriplet = [number, number, number];
+type BooleanTriplet = [boolean, boolean, boolean];
+type VideoTriplet = [HTMLVideoElement, HTMLVideoElement, HTMLVideoElement];
+
+type TimelineState = {
+  active: BooleanTriplet;
+  opacities: NumberTriplet;
+  times: NumberTriplet;
+};
 
 const clamp = (value: number, min = 0, max = 1) =>
   Math.min(max, Math.max(min, value));
@@ -36,43 +51,89 @@ function phaseFor(progress: number): Phase {
   return "COSMOS";
 }
 
-function drawCover(
-  context: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
-  alpha = 1,
-) {
-  if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+function timelineFor(progress: number, durations: NumberTriplet): TimelineState {
+  const ends = durations.map((duration) => Math.max(0, duration - 0.04)) as NumberTriplet;
+  const times: NumberTriplet = [0.02, 0.02, 0.02];
 
-  const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
-  const drawWidth = video.videoWidth * scale;
-  const drawHeight = video.videoHeight * scale;
-  const x = (width - drawWidth) / 2;
-  const y = (height - drawHeight) / 2;
+  if (progress < 0.06) {
+    times[0] = 0.02;
+  } else if (progress < 0.34) {
+    times[0] = 0.2 + range(progress, 0.06, 0.34) * (9.65 - 0.2);
+  } else if (progress <= 0.39) {
+    const transition = range(progress, 0.34, 0.39);
+    times[0] = 9.65 + transition * (ends[0] - 9.65);
+    times[1] = 0.02 + transition * (0.35 - 0.02);
+  } else if (progress < 0.68) {
+    times[1] = 0.35 + range(progress, 0.39, 0.68) * (9.65 - 0.35);
+  } else if (progress <= 0.73) {
+    const transition = range(progress, 0.68, 0.73);
+    times[1] = 9.65 + transition * (ends[1] - 9.65);
+    times[2] = 0.02 + transition * (0.4 - 0.02);
+  } else if (progress < 0.97) {
+    times[2] = 0.4 + range(progress, 0.73, 0.97) * (9.6 - 0.4);
+  } else {
+    times[2] = 9.6 + range(progress, 0.97, 1) * (ends[2] - 9.6);
+  }
 
-  context.save();
-  context.globalAlpha = alpha;
-  context.drawImage(video, x, y, drawWidth, drawHeight);
-  context.restore();
+  const firstMix = smoothstep(range(progress, 0.34, 0.39));
+  const secondMix = smoothstep(range(progress, 0.68, 0.73));
+
+  return {
+    active: [progress <= 0.39, progress >= 0.34 && progress <= 0.73, progress >= 0.68],
+    opacities: [1 - firstMix, firstMix * (1 - secondMix), secondMix],
+    times,
+  };
+}
+
+function setStoryVariables(scene: HTMLDivElement, progress: number) {
+  scene.style.setProperty("--progress", progress.toFixed(4));
+  scene.style.setProperty("--intro", String(1 - smoothstep(range(progress, 0.02, 0.08))));
+  scene.style.setProperty(
+    "--energy",
+    String(smoothstep(range(progress, 0.18, 0.21)) * (1 - smoothstep(range(progress, 0.27, 0.3)))),
+  );
+  scene.style.setProperty(
+    "--form",
+    String(smoothstep(range(progress, 0.47, 0.5)) * (1 - smoothstep(range(progress, 0.56, 0.6)))),
+  );
+  scene.style.setProperty(
+    "--memory",
+    String(smoothstep(range(progress, 0.61, 0.64)) * (1 - smoothstep(range(progress, 0.7, 0.74)))),
+  );
+  scene.style.setProperty(
+    "--cosmos",
+    String(smoothstep(range(progress, 0.79, 0.82)) * (1 - smoothstep(range(progress, 0.89, 0.93)))),
+  );
+  scene.style.setProperty("--final", String(smoothstep(range(progress, 0.94, 0.985))));
+  scene.style.setProperty("--reduced-fade", String(smoothstep(range(progress, 0.48, 0.66))));
+}
+
+function advanceVideo(video: HTMLVideoElement, targetTime: number) {
+  const maxTime = Math.max(0, (video.duration || 0) - FRAME_DURATION);
+  const target = clamp(targetTime, 0, maxTime);
+  const difference = target - video.currentTime;
+
+  if (Math.abs(difference) <= SEEK_THRESHOLD) return false;
+  if (video.seeking) return true;
+
+  const steppedTime = video.currentTime + clamp(
+    difference,
+    -MAXIMUM_FRAME_STEP,
+    MAXIMUM_FRAME_STEP,
+  );
+  const frameTime = Math.round(steppedTime / FRAME_DURATION) * FRAME_DURATION;
+  video.currentTime = clamp(frameTime, 0, maxTime);
+  return true;
 }
 
 export default function OriginExperience() {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const firstVideoRef = useRef<HTMLVideoElement>(null);
   const secondVideoRef = useRef<HTMLVideoElement>(null);
   const thirdVideoRef = useRef<HTMLVideoElement>(null);
-  const progressRef = useRef(0);
-  const frameRef = useRef<number | null>(null);
-  const videoFrameRefs = useRef<[number | null, number | null, number | null]>([
-    null,
-    null,
-    null,
-  ]);
   const loadingTimerRef = useRef<number | null>(null);
-  const loadedRef = useRef([false, false, false]);
+  const loadedRef = useRef<BooleanTriplet>([false, false, false]);
   const [sourceSet, setSourceSet] = useState<
     readonly [string, string, string] | null
   >(null);
@@ -81,166 +142,6 @@ export default function OriginExperience() {
   const [failed, setFailed] = useState(false);
   const [phase, setPhase] = useState<Phase>("POINT");
   const [reducedMotion, setReducedMotion] = useState(false);
-
-  const renderFrame = useCallback(() => {
-    const canvas = canvasRef.current;
-    const first = firstVideoRef.current;
-    const second = secondVideoRef.current;
-    const third = thirdVideoRef.current;
-    if (!canvas || !first || !second || !third) return;
-
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) return;
-
-    const progress = progressRef.current;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const hasFirstFrame = first.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
-    const hasSecondFrame = second.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
-    const hasThirdFrame = third.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
-    const requiredFramesReady =
-      progress < 0.34
-        ? hasFirstFrame
-        : progress <= 0.39
-          ? hasFirstFrame && hasSecondFrame
-          : progress < 0.68
-            ? hasSecondFrame
-            : progress <= 0.73
-              ? hasSecondFrame && hasThirdFrame
-              : hasThirdFrame;
-
-    // Seeking temporarily drops readyState. Keep the last decoded canvas frame
-    // visible instead of clearing it to black while the next frame is decoded.
-    if (!requiredFramesReady) return;
-
-    context.fillStyle = "#000";
-    context.fillRect(0, 0, width, height);
-
-    if (progress < 0.34) {
-      drawCover(context, first, width, height);
-      return;
-    }
-
-    if (progress <= 0.39) {
-      const mix = smoothstep(range(progress, 0.34, 0.39));
-      drawCover(context, first, width, height, 1);
-      drawCover(context, second, width, height, mix);
-      return;
-    }
-
-    if (progress < 0.68) {
-      drawCover(context, second, width, height);
-      return;
-    }
-
-    if (progress <= 0.73) {
-      const mix = smoothstep(range(progress, 0.68, 0.73));
-      drawCover(context, second, width, height, 1);
-      drawCover(context, third, width, height, mix);
-      return;
-    }
-
-    drawCover(context, third, width, height);
-  }, []);
-
-  const seekVideos = useCallback(
-    (progress: number) => {
-      const first = firstVideoRef.current;
-      const second = secondVideoRef.current;
-      const third = thirdVideoRef.current;
-      if (!first || !second || !third || !ready) return;
-
-      const firstEnd = Math.max(0, first.duration - 0.04);
-      const secondEnd = Math.max(0, second.duration - 0.04);
-      const thirdEnd = Math.max(0, third.duration - 0.04);
-      let firstTime = 0.02;
-      let secondTime = 0.02;
-      let thirdTime = 0.02;
-      let didSeek = false;
-
-      const seek = (video: HTMLVideoElement, time: number, index: 0 | 1 | 2) => {
-        if (Math.abs(video.currentTime - time) <= 1 / 48) return;
-
-        didSeek = true;
-        video.currentTime = time;
-
-        if (
-          typeof video.requestVideoFrameCallback === "function" &&
-          videoFrameRefs.current[index] === null
-        ) {
-          videoFrameRefs.current[index] = video.requestVideoFrameCallback(() => {
-            videoFrameRefs.current[index] = null;
-            renderFrame();
-          });
-        }
-      };
-
-      if (progress < 0.06) {
-        firstTime = 0.02;
-      } else if (progress < 0.34) {
-        firstTime = 0.2 + range(progress, 0.06, 0.34) * (9.65 - 0.2);
-      } else if (progress <= 0.39) {
-        const transition = range(progress, 0.34, 0.39);
-        firstTime = 9.65 + transition * (firstEnd - 9.65);
-        secondTime = 0.02 + transition * (0.35 - 0.02);
-      } else if (progress < 0.68) {
-        secondTime = 0.35 + range(progress, 0.39, 0.68) * (9.65 - 0.35);
-      } else if (progress <= 0.73) {
-        const transition = range(progress, 0.68, 0.73);
-        secondTime = 9.65 + transition * (secondEnd - 9.65);
-        thirdTime = 0.02 + transition * (0.4 - 0.02);
-      } else if (progress < 0.97) {
-        thirdTime = 0.4 + range(progress, 0.73, 0.97) * (9.6 - 0.4);
-      } else {
-        thirdTime = 9.6 + range(progress, 0.97, 1) * (thirdEnd - 9.6);
-      }
-
-      if (progress <= 0.39) seek(first, firstTime, 0);
-      if (progress >= 0.34 && progress <= 0.73) seek(second, secondTime, 1);
-      if (progress >= 0.68) seek(third, thirdTime, 2);
-
-      if (!didSeek) renderFrame();
-    },
-    [ready, renderFrame],
-  );
-
-  const updateProgress = useCallback(() => {
-    frameRef.current = null;
-    const scrollContainer = scrollRef.current;
-    const scene = sceneRef.current;
-    if (!scrollContainer || !scene) return;
-
-    const rect = scrollContainer.getBoundingClientRect();
-    const distance = Math.max(1, scrollContainer.offsetHeight - window.innerHeight);
-    const progress = clamp(-rect.top / distance);
-    progressRef.current = progress;
-    const nextPhase = phaseFor(progress);
-    setPhase((current) => (current === nextPhase ? current : nextPhase));
-
-    scene.style.setProperty("--progress", progress.toFixed(4));
-    scene.style.setProperty("--intro", String(1 - smoothstep(range(progress, 0.02, 0.08))));
-    scene.style.setProperty(
-      "--energy",
-      String(smoothstep(range(progress, 0.18, 0.21)) * (1 - smoothstep(range(progress, 0.27, 0.3)))),
-    );
-    scene.style.setProperty(
-      "--form",
-      String(smoothstep(range(progress, 0.47, 0.5)) * (1 - smoothstep(range(progress, 0.56, 0.6)))),
-    );
-    scene.style.setProperty(
-      "--memory",
-      String(smoothstep(range(progress, 0.61, 0.64)) * (1 - smoothstep(range(progress, 0.7, 0.74)))),
-    );
-    scene.style.setProperty(
-      "--cosmos",
-      String(smoothstep(range(progress, 0.79, 0.82)) * (1 - smoothstep(range(progress, 0.89, 0.93)))),
-    );
-    scene.style.setProperty("--final", String(smoothstep(range(progress, 0.94, 0.985))));
-    scene.style.setProperty("--reduced-fade", String(smoothstep(range(progress, 0.48, 0.66))));
-
-    if (!reducedMotion) seekVideos(progress);
-  }, [reducedMotion, seekVideos]);
 
   useEffect(() => {
     const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -268,41 +169,42 @@ export default function OriginExperience() {
 
   useEffect(() => {
     if (!sourceSet || reducedMotion) return;
+
     const videos = [
       firstVideoRef.current,
       secondVideoRef.current,
       thirdVideoRef.current,
     ];
     if (videos.some((video) => !video)) return;
-    const callbackHandles = videoFrameRefs.current;
 
+    const videoTriplet = videos as VideoTriplet;
     loadedRef.current = [false, false, false];
     setFailed(false);
     setReady(false);
     setLoadProgress(0);
 
     const updateBuffered = () => {
-      let total = 0;
-      videos.forEach((video, index) => {
-        if (!video) return;
-        if (loadedRef.current[index]) {
-          total += 1;
-          return;
-        }
+      const buffered = videoTriplet.reduce((total, video, index) => {
+        if (loadedRef.current[index]) return total + 1;
         const duration = Number.isFinite(video.duration) ? video.duration : 0;
         const end = video.buffered.length
           ? video.buffered.end(video.buffered.length - 1)
           : 0;
-        total += duration > 0 ? Math.min(0.92, end / duration) : 0;
-      });
-      setLoadProgress(Math.round((total / 3) * 100));
+        return total + (duration > 0 ? Math.min(0.92, end / duration) : 0);
+      }, 0);
+      setLoadProgress(Math.round((buffered / videoTriplet.length) * 100));
     };
 
     const markReady = (index: number) => {
+      if (loadedRef.current[index]) return;
       loadedRef.current[index] = true;
       updateBuffered();
+
       if (loadedRef.current.every(Boolean)) {
-        if (loadingTimerRef.current) window.clearTimeout(loadingTimerRef.current);
+        if (loadingTimerRef.current !== null) {
+          window.clearTimeout(loadingTimerRef.current);
+          loadingTimerRef.current = null;
+        }
         setLoadProgress(100);
         setReady(true);
       }
@@ -310,18 +212,16 @@ export default function OriginExperience() {
 
     const onError = () => setFailed(true);
     const disposers: Array<() => void> = [];
-    videos.forEach((video, index) => {
-      if (!video) return;
+
+    videoTriplet.forEach((video, index) => {
       const readyHandler = () => markReady(index);
       video.addEventListener("loadeddata", readyHandler, { once: true });
       video.addEventListener("progress", updateBuffered);
-      video.addEventListener("seeked", renderFrame);
       video.addEventListener("error", onError);
       video.load();
       disposers.push(() => {
         video.removeEventListener("loadeddata", readyHandler);
         video.removeEventListener("progress", updateBuffered);
-        video.removeEventListener("seeked", renderFrame);
         video.removeEventListener("error", onError);
       });
     });
@@ -332,99 +232,145 @@ export default function OriginExperience() {
 
     return () => {
       disposers.forEach((dispose) => dispose());
-      videos.forEach((video, index) => {
-        const handle = callbackHandles[index];
-        if (
-          video &&
-          handle !== null &&
-          typeof video.cancelVideoFrameCallback === "function"
-        ) {
-          video.cancelVideoFrameCallback(handle);
-          callbackHandles[index] = null;
-        }
-      });
-      if (loadingTimerRef.current) window.clearTimeout(loadingTimerRef.current);
+      if (loadingTimerRef.current !== null) {
+        window.clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
     };
-  }, [sourceSet, reducedMotion, renderFrame]);
+  }, [sourceSet, reducedMotion]);
 
   useEffect(() => {
     if (!ready) return;
-    const handleScroll = () => {
-      if (frameRef.current === null) {
-        frameRef.current = window.requestAnimationFrame(updateProgress);
-      }
-    };
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = Math.round(window.innerWidth * ratio);
-        canvas.height = Math.round(window.innerHeight * ratio);
-      }
-      updateProgress();
-      renderFrame();
+
+    const scrollContainer = scrollRef.current;
+    const scene = sceneRef.current;
+    const first = firstVideoRef.current;
+    const second = secondVideoRef.current;
+    const third = thirdVideoRef.current;
+    if (!scrollContainer || !scene || !first || !second || !third) return;
+
+    const videos: VideoTriplet = [first, second, third];
+    let targetProgress = 0;
+    let renderedProgress = 0;
+    let animationFrame: number | null = null;
+    let lastFrameTime = performance.now();
+
+    const measureProgress = () => {
+      const rect = scrollContainer.getBoundingClientRect();
+      const distance = Math.max(1, scrollContainer.offsetHeight - window.innerHeight);
+      return clamp(-rect.top / distance);
     };
 
-    handleResize();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleResize);
-      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    const render = (progress: number) => {
+      const durations = videos.map((video) => video.duration || 0) as NumberTriplet;
+      const timeline = timelineFor(progress, durations);
+
+      setStoryVariables(scene, progress);
+      videos.forEach((video, index) => {
+        video.style.opacity = timeline.opacities[index].toFixed(3);
+      });
+
+      const nextPhase = phaseFor(progress);
+      setPhase((current) => (current === nextPhase ? current : nextPhase));
+
+      if (reducedMotion || document.hidden) return false;
+      return videos.reduce(
+        (needsUpdate, video, index) =>
+          timeline.active[index] && advanceVideo(video, timeline.times[index])
+            ? true
+            : needsUpdate,
+        false,
+      );
     };
-  }, [ready, renderFrame, updateProgress]);
+
+    const tick = (time: number) => {
+      animationFrame = null;
+      const elapsed = Math.min(Math.max(time - lastFrameTime, 0), 64);
+      lastFrameTime = time;
+      const distance = targetProgress - renderedProgress;
+
+      renderedProgress = reducedMotion || Math.abs(distance) < PROGRESS_EPSILON
+        ? targetProgress
+        : renderedProgress + distance * (1 - Math.exp(-elapsed / SCROLL_SMOOTHING_MS));
+
+      const videosNeedUpdate = render(renderedProgress);
+      const progressNeedsUpdate = Math.abs(targetProgress - renderedProgress) >= PROGRESS_EPSILON;
+
+      if (progressNeedsUpdate || videosNeedUpdate) {
+        animationFrame = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const schedule = () => {
+      targetProgress = measureProgress();
+      if (animationFrame !== null) return;
+      lastFrameTime = performance.now();
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    targetProgress = measureProgress();
+    renderedProgress = targetProgress;
+    render(renderedProgress);
+
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    document.addEventListener("visibilitychange", schedule);
+
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("visibilitychange", schedule);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [ready, reducedMotion]);
 
   const retry = () => {
     setFailed(false);
     setLoadProgress(0);
-    loadedRef.current = [false, false, false];
-    firstVideoRef.current?.load();
-    secondVideoRef.current?.load();
-    thirdVideoRef.current?.load();
     window.location.reload();
   };
 
   return (
     <main ref={scrollRef} className="origin-scroll">
       <div ref={sceneRef} className={`origin-scene ${ready ? "is-ready" : ""}`}>
-        <div className="film-layer">
-          <canvas
-            ref={canvasRef}
-            className="film-canvas"
-            aria-label="Filmowa opowieść o przemianie punktu światła w kolibra, który powraca do kosmosu"
+        <div
+          className="film-layer"
+          role="img"
+          aria-label="Filmowa opowieść o przemianie punktu światła w kolibra, który powraca do kosmosu"
+        >
+          <video
+            ref={firstVideoRef}
+            className="origin-video origin-video-one"
+            src={sourceSet?.[0]}
+            muted
+            playsInline
+            preload="auto"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <video
+            ref={secondVideoRef}
+            className="origin-video origin-video-two"
+            src={sourceSet?.[1]}
+            muted
+            playsInline
+            preload="auto"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <video
+            ref={thirdVideoRef}
+            className="origin-video origin-video-three"
+            src={sourceSet?.[2]}
+            muted
+            playsInline
+            preload="auto"
+            tabIndex={-1}
+            aria-hidden="true"
           />
           <div className="reduced-frame reduced-start" />
           <div className="reduced-frame reduced-final" />
         </div>
-
-        <video
-          ref={firstVideoRef}
-          src={sourceSet?.[0]}
-          muted
-          playsInline
-          preload="auto"
-          tabIndex={-1}
-          aria-hidden="true"
-        />
-        <video
-          ref={secondVideoRef}
-          src={sourceSet?.[1]}
-          muted
-          playsInline
-          preload="auto"
-          tabIndex={-1}
-          aria-hidden="true"
-        />
-        <video
-          ref={thirdVideoRef}
-          src={sourceSet?.[2]}
-          muted
-          playsInline
-          preload="auto"
-          tabIndex={-1}
-          aria-hidden="true"
-        />
 
         <div className="edge-vignette" aria-hidden="true" />
 

@@ -31,7 +31,7 @@ async function exportStatic() {
   const clientDist = path.resolve(root, "dist", "client");
   try {
     await cp(clientDist, outDir, { recursive: true });
-  } catch (e) {
+  } catch {
     // optional
   }
 
