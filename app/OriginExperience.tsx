@@ -108,7 +108,7 @@ function setStoryVariables(scene: HTMLDivElement, progress: number) {
   scene.style.setProperty("--reduced-fade", String(smoothstep(range(progress, 0.48, 0.66))));
 }
 
-function advanceVideo(video: HTMLVideoElement, targetTime: number) {
+function advanceVideo(video: HTMLVideoElement, targetTime: number, speedMultiplier = 1) {
   const maxTime = Math.max(0, (video.duration || 0) - FRAME_DURATION);
   const target = clamp(targetTime, 0, maxTime);
   const difference = target - video.currentTime;
@@ -116,10 +116,11 @@ function advanceVideo(video: HTMLVideoElement, targetTime: number) {
   if (Math.abs(difference) <= SEEK_THRESHOLD) return false;
   if (video.seeking) return true;
 
+  const maxStep = MAXIMUM_FRAME_STEP * Math.max(1, speedMultiplier);
   const steppedTime = video.currentTime + clamp(
     difference,
-    -MAXIMUM_FRAME_STEP,
-    MAXIMUM_FRAME_STEP,
+    -maxStep,
+    maxStep,
   );
   const frameTime = Math.round(steppedTime / FRAME_DURATION) * FRAME_DURATION;
   video.currentTime = clamp(frameTime, 0, maxTime);
@@ -261,7 +262,7 @@ export default function OriginExperience() {
       return clamp(-rect.top / distance);
     };
 
-    const render = (progress: number) => {
+    const render = (progress: number, speedMultiplier = 1) => {
       const durations = videos.map((video) => video.duration || 0) as NumberTriplet;
       const timeline = timelineFor(progress, durations);
 
@@ -276,7 +277,7 @@ export default function OriginExperience() {
       if (reducedMotion || document.hidden) return false;
       return videos.reduce(
         (needsUpdate, video, index) =>
-          timeline.active[index] && advanceVideo(video, timeline.times[index])
+          timeline.active[index] && advanceVideo(video, timeline.times[index], speedMultiplier)
             ? true
             : needsUpdate,
         false,
@@ -293,7 +294,9 @@ export default function OriginExperience() {
         ? targetProgress
         : renderedProgress + distance * (1 - Math.exp(-elapsed / SCROLL_SMOOTHING_MS));
 
-      const videosNeedUpdate = render(renderedProgress);
+      const velocity = Math.abs(distance);
+      const speedMultiplier = Math.min(6, 1 + velocity * 25);
+      const videosNeedUpdate = render(renderedProgress, speedMultiplier);
       const progressNeedsUpdate = Math.abs(targetProgress - renderedProgress) >= PROGRESS_EPSILON;
 
       if (progressNeedsUpdate || videosNeedUpdate) {
