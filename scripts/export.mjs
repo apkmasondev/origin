@@ -1,4 +1,4 @@
-import { mkdir, cp, writeFile } from "node:fs/promises";
+import { mkdir, cp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,15 +12,36 @@ async function exportStatic() {
   workerUrl.searchParams.set("export", Date.now().toString());
   const { default: handler } = await import(workerUrl.href);
 
-  const response = await handler(
+  // The build may emit either a bare fetch function or a worker-style object.
+  const fetchHandler =
+    typeof handler === "function" ? handler : handler.fetch.bind(handler);
+
+  const response = await fetchHandler(
     new Request("http://localhost/", {
       headers: { accept: "text/html", host: "localhost" },
-    })
+    }),
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    },
+    { waitUntil() {}, passThroughOnException() {} },
   );
 
-  let html = await response.text();
+  // Without this an SSR failure would be written out as index.html and shipped
+  // by CI as a successful deploy.
+  if (!response.ok) {
+    throw new Error(
+      `Renderer returned ${response.status} ${response.statusText}`.trim(),
+    );
+  }
 
-  // Create output directory
+  const html = await response.text();
+  if (!/<\/html>/i.test(html)) {
+    throw new Error("Rendered output is not a complete HTML document");
+  }
+
+  // Start from a clean directory so hashed assets from earlier builds are not
+  // published alongside the current ones.
+  await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
   // Copy public assets

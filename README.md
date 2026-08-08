@@ -13,11 +13,29 @@ npm install
 npm run dev
 ```
 
-Projekt pozostaje lokalny. Komenda `npm run build` wykonuje produkcyjną
-walidację bez publikowania strony.
+Pozostałe komendy:
 
-Przed wdrożeniem skopiuj `.env.example` do konfiguracji hostingu i ustaw
-`NEXT_PUBLIC_SITE_URL` na publiczny adres strony. Zmienna nie jest sekretem.
+```bash
+npm run lint     # ESLint
+npm test         # build + testy renderowanego HTML
+npm run export   # build + statyczny eksport do ./out
+```
+
+## Wdrożenie
+
+`.github/workflows/deploy.yml` publikuje zawartość `./out` na GitHub Pages przy
+każdym pushu do `main`. Workflow uruchamia kolejno lint, build, testy i eksport,
+więc nieudany lint lub test zatrzymuje wdrożenie.
+
+Wszystkie ścieżki do zasobów są względne, dzięki czemu strona działa również pod
+podkatalogiem (np. `https://uzytkownik.github.io/origin/`).
+
+Ustaw zmienną repozytorium `NEXT_PUBLIC_SITE_URL` (Settings → Secrets and
+variables → Actions → Variables) na publiczny adres strony — jest używana
+wyłącznie do zbudowania bezwzględnych adresów `og:image` i `og:url`, których
+wymagają podglądy linków w mediach społecznościowych. Zmienna nie jest sekretem;
+bez niej strona działa, ale podglądy linków nie pokażą obrazka. Lokalnie można ją
+ustawić kopiując `.env.example` do `.env.local`.
 
 ## Materiały
 
@@ -26,8 +44,12 @@ Przed wdrożeniem skopiuj `.env.example` do konfiguracji hostingu i ustaw
 - wszystkie filmy bez audio,
 - tryb ograniczonego ruchu: poster startowy i kosmiczny poster finałowy WebP.
 
-Filmy pozostają osobnymi plikami. Oba przejścia są wykonywane w kodzie jako
-odwracalne crossfade’y na jednym canvasie.
+Filmy pozostają osobnymi plikami. Każdy z nich jest osobnym elementem `<video>`,
+a oba przejścia to odwracalne crossfade’y sterowane przezroczystością tych
+elementów — bez `<canvas>` i bez przerysowywania klatek w JS.
+
+W trybie ograniczonego ruchu filmy nie są w ogóle pobierane; scenę zastępują
+statyczne postery.
 
 ## Git
 
@@ -37,6 +59,6 @@ dłuższym utrzymywaniu historii projektu warto rozważyć Git LFS dla `*.mp4`.
 
 ## Identyfikacja wizualna
 
-- favicon: monogram `O` w `app/icon.svg`,
+- favicon: monogram `O` w `public/favicon.svg`,
 - intro: tekst kadruje prawdziwy punkt światła zamiast go zasłaniać,
 - interfejs: oszczędny indeks faz i typografia inspirowana planszami filmowymi.

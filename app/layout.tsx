@@ -5,16 +5,24 @@ const title = "ORIGIN — The Cycle of Becoming";
 const description =
   "A scroll-driven cinematic cycle: a point becomes energy, life and cosmos, then returns.";
 
+// Social crawlers ignore relative og:image / twitter:image values, so the URL is
+// made absolute from NEXT_PUBLIC_SITE_URL when it is configured. Without it the
+// build stays on the relative path, which keeps the page itself sub-path safe.
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
+const ogImage = siteUrl ? `${siteUrl}/og.png` : "og.png";
+
 export const metadata: Metadata = {
   title,
   description,
+  ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   openGraph: {
     title,
     description,
     type: "website",
+    ...(siteUrl ? { url: siteUrl } : {}),
     images: [
       {
-        url: "og.png",
+        url: ogImage,
         width: 1672,
         height: 939,
         alt: "ORIGIN — luminous hummingbird framed by the words From a Point to Life",
@@ -25,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    images: ["og.png"],
+    images: [ogImage],
   },
 };
 

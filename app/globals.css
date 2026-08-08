@@ -111,12 +111,10 @@ a {
   background-size: cover;
 }
 
-.reduced-start {
-  background-image: url("assets/posters/poster-start.webp");
-}
-
+/* background-image for .reduced-start / .reduced-final / .loader-poster is set
+   inline in OriginExperience.tsx: a url() written here would be resolved
+   against the emitted /assets/index-*.css, not against the document. */
 .reduced-final {
-  background-image: url("assets/posters/poster-final-cosmos.webp");
   opacity: var(--reduced-fade);
 }
 
@@ -145,7 +143,10 @@ a {
 .loader-poster {
   position: absolute;
   inset: 0;
-  background: #000 url("assets/posters/poster-start.webp") center / cover no-repeat;
+  background-color: #000;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   opacity: 0.48;
 }
 

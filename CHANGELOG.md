@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-08-08
+
+### Fixed
+
+- **Posters never loaded in production**: `url("assets/posters/…")` in `globals.css` was resolved against the emitted `/assets/index-*.css`, requesting `/assets/assets/posters/…` (404). The loader backdrop was blank and, because `prefers-reduced-motion` hides the videos, reduced-motion visitors saw a fully black page. Poster URLs are now applied as inline styles from `OriginExperience.tsx`, so they resolve against the document like the video sources already did.
+- **Wasted bandwidth in reduced-motion mode**: the `<video>` elements kept `src` and `preload="auto"` while being `display: none`, downloading roughly 70 MB of unused footage. Sources are now withheld when reduced motion is active.
+- **Broken social link previews**: `og:image` / `twitter:image` were emitted as the relative value `og.png`, which crawlers cannot resolve. `NEXT_PUBLIC_SITE_URL` — previously documented but unused — now produces absolute `og:image` and `og:url` values, falling back to the relative path when unset.
+- **`prefers-reduced-motion` changes were ignored**: the media query was read once on mount with no `change` listener, so toggling the OS setting left the experience in the wrong mode.
+- **Static export could publish a broken site**: `scripts/export.mjs` ignored the response status, so an SSR failure would be written to `index.html` and deployed as a success. It now rejects non-OK responses and incomplete documents, passes the worker `env`/`ctx` like the test harness does, and clears `out/` first so hashed assets from earlier builds are no longer published alongside the current ones.
+- **Accessibility**: replaced Polish `aria-label`s on a `lang="en"` document with English equivalents; dropped the `aria-label` from the decorative `.progress-rail`, where it was ignored for lack of a role; hid the per-frame loader counter from assistive tech and announced the loader caption via `role="status"`.
+
+### Changed
+
+- **CI**: the Pages workflow now runs `npm ci` (instead of masking lockfile drift with `npm ci || npm install`), enables npm caching, and gates deployment on lint and tests. Build, test and export share a single build via the new `test:rendered` and `export:static` scripts.
+- **Docs**: corrected the README, which described a `<canvas>` crossfade that does not exist, pointed at a non-existent `app/icon.svg`, and claimed the project is local-only despite the GitHub Pages workflow. Added deployment and `NEXT_PUBLIC_SITE_URL` setup notes.
+
 ## [Unreleased] - 2026-07-31
 
 ### Changed

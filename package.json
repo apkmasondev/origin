@@ -8,9 +8,11 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "export": "npm run build && node scripts/export.mjs",
+    "export": "npm run build && npm run export:static",
+    "export:static": "node scripts/export.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && npm run test:rendered",
+    "test:rendered": "node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {

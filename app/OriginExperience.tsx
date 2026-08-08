@@ -15,6 +15,16 @@ const SOURCES = {
   ],
 } as const;
 
+// Poster paths stay relative to the document (like the video sources above) so
+// the site keeps working under a GitHub Pages sub-path. They are applied as
+// inline styles rather than from globals.css on purpose: a url() inside the
+// stylesheet resolves against the emitted /assets/index-*.css file, which would
+// turn "assets/posters/x.webp" into "/assets/assets/posters/x.webp".
+const POSTERS = {
+  start: "assets/posters/poster-start.webp",
+  finalCosmos: "assets/posters/poster-final-cosmos.webp",
+} as const;
+
 const FRAME_DURATION = 1 / 24;
 const SEEK_THRESHOLD = FRAME_DURATION * 0.62;
 const MAXIMUM_FRAME_STEP = FRAME_DURATION * 2.25;
@@ -156,16 +166,28 @@ export default function OriginExperience() {
       connection?.saveData ||
       /(^|-)2g$/.test(connection?.effectiveType ?? "");
 
-    const setupFrame = window.requestAnimationFrame(() => {
-      setReducedMotion(reduceQuery.matches);
-      setSourceSet(useSmall ? SOURCES.small : SOURCES.large);
-      if (reduceQuery.matches) {
+    const applyReducedMotion = (matches: boolean) => {
+      setReducedMotion(matches);
+      if (matches) {
         setReady(true);
         setLoadProgress(100);
+        setFailed(false);
       }
+    };
+
+    const setupFrame = window.requestAnimationFrame(() => {
+      applyReducedMotion(reduceQuery.matches);
+      setSourceSet(useSmall ? SOURCES.small : SOURCES.large);
     });
 
-    return () => window.cancelAnimationFrame(setupFrame);
+    const onReduceChange = (event: MediaQueryListEvent) =>
+      applyReducedMotion(event.matches);
+    reduceQuery.addEventListener("change", onReduceChange);
+
+    return () => {
+      window.cancelAnimationFrame(setupFrame);
+      reduceQuery.removeEventListener("change", onReduceChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -333,18 +355,23 @@ export default function OriginExperience() {
     window.location.reload();
   };
 
+  // In reduced-motion mode the videos are hidden by CSS and replaced with the
+  // posters, so their sources are left unset — otherwise preload="auto" would
+  // still pull down ~70 MB of footage that is never displayed.
+  const videoSources = reducedMotion ? null : sourceSet;
+
   return (
     <main ref={scrollRef} className="origin-scroll">
       <div ref={sceneRef} className={`origin-scene ${ready ? "is-ready" : ""}`}>
         <div
           className="film-layer"
           role="img"
-          aria-label="Filmowa opowieść o przemianie punktu światła w kolibra, który powraca do kosmosu"
+          aria-label="A cinematic sequence in which a point of light becomes a hummingbird and returns to the cosmos"
         >
           <video
             ref={firstVideoRef}
             className="origin-video origin-video-one"
-            src={sourceSet?.[0]}
+            src={videoSources?.[0]}
             muted
             playsInline
             preload="auto"
@@ -354,7 +381,7 @@ export default function OriginExperience() {
           <video
             ref={secondVideoRef}
             className="origin-video origin-video-two"
-            src={sourceSet?.[1]}
+            src={videoSources?.[1]}
             muted
             playsInline
             preload="auto"
@@ -364,26 +391,36 @@ export default function OriginExperience() {
           <video
             ref={thirdVideoRef}
             className="origin-video origin-video-three"
-            src={sourceSet?.[2]}
+            src={videoSources?.[2]}
             muted
             playsInline
             preload="auto"
             tabIndex={-1}
             aria-hidden="true"
           />
-          <div className="reduced-frame reduced-start" />
-          <div className="reduced-frame reduced-final" />
+          <div
+            className="reduced-frame reduced-start"
+            style={{ backgroundImage: `url(${POSTERS.start})` }}
+          />
+          <div
+            className="reduced-frame reduced-final"
+            style={{ backgroundImage: `url(${POSTERS.finalCosmos})` }}
+          />
         </div>
 
         <div className="edge-vignette" aria-hidden="true" />
 
         <div className={`loader ${ready && !failed ? "loader-hidden" : ""}`}>
-          <div className="loader-poster" aria-hidden="true" />
-          <div className="loader-center">
+          <div
+            className="loader-poster"
+            style={{ backgroundImage: `url(${POSTERS.start})` }}
+            aria-hidden="true"
+          />
+          <div className="loader-center" aria-hidden="true">
             <span className="loader-dot" />
             <span className="loader-value">{String(loadProgress).padStart(2, "0")}</span>
           </div>
-          <p className="loader-caption">
+          <p className="loader-caption" role="status">
             {failed ? "THE SEQUENCE COULD NOT FORM" : "ASSEMBLING LIGHT"}
           </p>
           {failed && (
@@ -406,7 +443,7 @@ export default function OriginExperience() {
             <span className="phase-name">{phase}</span>
           </div>
 
-          <div className="progress-rail" aria-label="Postęp opowieści">
+          <div className="progress-rail" aria-hidden="true">
             <span className="progress-line" />
             <span className="progress-marker" />
           </div>
