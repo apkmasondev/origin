@@ -15,7 +15,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **CI**: the Pages workflow now runs `npm ci` (instead of masking lockfile drift with `npm ci || npm install`), enables npm caching, and gates deployment on lint and tests. Build, test and export share a single build via the new `test:rendered` and `export:static` scripts.
+- **Incomplete lockfile**: `package-lock.json` contained dependency edges with no matching entry — `@img/sharp-wasm32` required `@emnapi/runtime@^1.11.0`, and `@rolldown/binding-wasm32-wasi` required `@emnapi/core@2.0.0-alpha.3`. Neither package is platform-restricted, so `npm ci` failed outright on Linux; the workflow's `npm ci || npm install` fallback had been hiding it. The lockfile was re-resolved from a clean tree, which supplies the missing packages and moves rolldown to 1.2.3, where the wasm32 binding no longer exists. All platform binaries are retained.
+- **CI**: the Pages workflow now runs `npm ci` (instead of masking lockfile drift with `npm ci || npm install`), enables npm caching, runs on Node 24 to match the toolchain the lockfile is resolved with, and gates deployment on lint and tests. Build, test and export share a single build via the new `test:rendered` and `export:static` scripts.
 - **Docs**: corrected the README, which described a `<canvas>` crossfade that does not exist, pointed at a non-existent `app/icon.svg`, and claimed the project is local-only despite the GitHub Pages workflow. Added deployment and `NEXT_PUBLIC_SITE_URL` setup notes.
 
 ## [Unreleased] - 2026-07-31

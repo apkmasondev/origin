@@ -24,10 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Node 24 bundles npm 11. package-lock.json is an npm 11 lockfile: npm 10
-      # (bundled with Node 22) rejects it, because it does not record the
-      # dependencies of optional packages built for a foreign cpu, such as the
-      # wasm32 sharp and rolldown bindings.
+      # Node 24 matches the npm 11 toolchain package-lock.json is resolved with.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
